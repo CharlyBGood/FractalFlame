@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generador de Fractal Flames</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Generador de Fractal Flames</h1>
+    <div class="container">
+      <div class="controls">
+        <h2>Configuración Global</h2>
+        <div class="control-group">
+          <label for="gamma">Gamma (Contraste):</label>
+          <input
+            type="range"
+            id="gamma"
+            min="1"
+            max="5"
+            step="0.1"
+            value="2.2"
+          />
+          <span id="gamma-value">2.2</span>
+        </div>
+        <div class="control-group">
+          <label for="brightness">Brillo:</label>
+          <input
+            type="range"
+            id="brightness"
+            min="0.1"
+            max="10"
+            step="0.1"
+            value="4.0"
+          />
+          <span id="brightness-value">4.0</span>
+        </div>
+        <div class="control-group">
+          <label for="quality">Calidad (Iteraciones):</label>
+          <input
+            type="range"
+            id="quality"
+            min="100000"
+            max="5000000"
+            step="100000"
+            value="1000000"
+          />
+          <span id="quality-value">1M</span>
+        </div>
+
+        <hr />
+        <h2>Transformaciones (XForms)</h2>
+        <div id="xforms-container">
+          <!-- Las transformaciones se añadirán aquí con JavaScript -->
+        </div>
+        <button id="add-xform">Añadir Transformación</button>
+        <button id="render-btn">Generar Imagen</button>
+      </div>
+      <div class="canvas-container">
+        <canvas id="fractal-canvas" width="600" height="600"></canvas>
+        <div id="loading-indicator" style="display: none">Renderizando...</div>
+      </div>
+    </div>
+
+    <script src="flame.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

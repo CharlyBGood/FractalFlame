@@ -1,0 +1,54 @@
+/* style.css */
+body {
+  font-family: sans-serif;
+  background-color: #282c34;
+  color: white;
+}
+
+.container {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+}
+
+.controls {
+  flex-basis: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.canvas-container {
+  flex-grow: 1;
+  text-align: center;
+}
+
+#fractal-canvas {
+  border: 1px solid #666;
+  background-color: black;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.xform {
+  border: 1px solid #444;
+  padding: 10px;
+  border-radius: 5px;
+}
+
+button {
+  padding: 10px;
+  background-color: #61afef;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+#loading-indicator {
+  margin-top: 10px;
+  font-size: 1.2em;
+  color: #61afef;
+}
