@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Elementos del DOM ---
   const canvas = document.getElementById('fractal-canvas');
   const controls = {
+    panel: document.querySelector('.controls-panel'),
     gamma: document.getElementById('gamma'),
     brightness: document.getElementById('brightness'),
     quality: document.getElementById('quality'),
@@ -12,14 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
     addXformBtn: document.getElementById('add-xform-btn'),
     xformsContainer: document.getElementById('xforms-container'),
     loadingIndicator: document.getElementById('loading-indicator'),
-    globalControlsForm: document.getElementById('global-controls-form'),
   };
 
   let xformCounter = 0;
-  const PREVIEW_QUALITY = 50000; // Calidad para el renderizado rápido
+  const PREVIEW_QUALITY = 50000;
 
   // --- Helper: Debounce ---
-  // Evita que una función se ejecute demasiadas veces, esperando a que el usuario pare.
   function debounce(func, delay) {
     let timeout;
     return function (...args) {
@@ -33,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (slider.id === 'quality') {
       label.textContent = `${(slider.value / 1000000).toFixed(1)}M`;
     } else {
-      label.textContent = slider.value;
+      label.textContent = parseFloat(slider.value).toFixed(1);
     }
   }
 
@@ -44,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="xform" id="${xformId}" data-id="${xformCounter}">
                 <div class="xform-header">
                     <h4>Transformación ${xformCounter}</h4>
-                    <button class="remove-xform-btn" data-target="${xformId}">×</button>
+                    <button class="remove-xform-btn" data-target="${xformId}" title="Eliminar transformación">×</button>
                 </div>
                 <div class="control-group">
                     <label>Peso</label>
@@ -70,14 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
         `;
     controls.xformsContainer.insertAdjacentHTML('beforeend', xformHTML);
-    if (!isInitial) triggerFullRender(); // Renderizar al añadir nueva forma
+    if (!isInitial) triggerFullRender();
   }
 
   function getRandomColor() {
-    const h = Math.random() * 360;
-    const s = 70 + Math.random() * 30;
-    const l = 50 + Math.random() * 20;
-    return `hsl(${h}, ${s}%, ${l}%)`;
+    return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
   }
 
   function getRandomCoefs() {
@@ -89,14 +85,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = {
       gamma: parseFloat(controls.gamma.value),
       brightness: parseFloat(controls.brightness.value),
-      quality: isPreview ? PREVIEW_QUALITY : parseInt(controls.quality.value),
+      quality: isPreview ? PREVIEW_QUALITY : parseInt(controls.quality.value, 10),
       xforms: []
     };
     document.querySelectorAll('.xform').forEach(el => {
       const colorHex = el.querySelector('.xform-color').value;
       params.xforms.push({
         weight: parseFloat(el.querySelector('.xform-weight').value),
-        color: { // Convertir de hex #RRGGBB a {r, g, b} en [0, 1]
+        color: {
           r: parseInt(colorHex.slice(1, 3), 16) / 255,
           g: parseInt(colorHex.slice(3, 5), 16) / 255,
           b: parseInt(colorHex.slice(5, 7), 16) / 255,
@@ -108,7 +104,11 @@ document.addEventListener('DOMContentLoaded', () => {
     return params;
   }
 
+  let isRendering = false;
   async function render(isPreview) {
+    if (isRendering && !isPreview) return; // Evita renderizados de alta calidad simultáneos
+    isRendering = true;
+
     if (!isPreview) {
       controls.loadingIndicator.style.display = 'flex';
     }
@@ -117,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (params.xforms.length > 0) {
       const renderer = new FlameRenderer(canvas, params);
-      // Ejecutamos en un timeout para permitir que la UI se actualice
       await new Promise(resolve => setTimeout(() => {
         renderer.render().then(resolve);
       }, 10));
@@ -126,46 +125,47 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isPreview) {
       controls.loadingIndicator.style.display = 'none';
     }
+    isRendering = false;
   }
 
   // --- Vinculación de Eventos ---
   const triggerPreviewRender = () => render(true);
-  const triggerFullRender = debounce(() => render(false), 400); // Espera 400ms después del último cambio
+  const triggerFullRender = debounce(() => render(false), 500); // Aumentado a 500ms
 
-  function handleControlChange() {
+  function handleControlChange(event) {
+    // Actualizar el valor numérico del slider si es un 'input' de tipo rango
+    if (event.target.type === 'range') {
+      const label = event.target.previousElementSibling;
+      if (label && label.querySelector('.value-display')) {
+        updateSliderValue(event.target, label.querySelector('.value-display'));
+      }
+    }
+
     triggerPreviewRender();
     triggerFullRender();
   }
 
-  // Listen for changes on the whole panel for efficiency
-  controls.controls - panel.addEventListener('input', (e) => {
-    if (e.target.matches('input[type=range], input[type=color], select')) {
-      if (e.target.closest('.xform') || e.target.closest('#global-controls-form')) {
-        // Actualizar valor numérico del slider
-        const valueDisplay = e.target.parentElement.querySelector('.value-display');
-        if (valueDisplay) updateSliderValue(e.target, valueDisplay);
-
-        handleControlChange();
-      }
-    }
-  });
+  // Escuchador de eventos centralizado en el panel de controles. ¡Esta es la corrección clave!
+  controls.panel.addEventListener('input', handleControlChange);
 
   controls.addXformBtn.addEventListener('click', () => addXform(false));
 
   controls.xformsContainer.addEventListener('click', (e) => {
     if (e.target.classList.contains('remove-xform-btn')) {
       document.getElementById(e.target.dataset.target).remove();
-      triggerFullRender(); // Renderizar al quitar una forma
+      triggerFullRender();
     }
   });
 
   // --- Inicialización ---
   addXform(true);
   addXform(true);
+
+  // Actualizar valores iniciales de los sliders
   updateSliderValue(controls.gamma, controls.gammaValue);
   updateSliderValue(controls.brightness, controls.brightnessValue);
   updateSliderValue(controls.quality, controls.qualityValue);
 
   // Renderizado inicial al cargar la página
-  triggerFullRender();
+  render(false);
 });
