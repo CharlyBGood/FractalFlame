@@ -16,23 +16,33 @@ class FlameRenderer {
   // --- Definición de las variaciones no lineales (Vj) ---
   // (Implementamos algunas de las más importantes del PDF)
   variations = {
-    // v0: Linear
     linear: (x, y) => ({ x, y }),
-    // v1: Sinusoidal
     sinusoidal: (x, y) => ({ x: Math.sin(x), y: Math.sin(y) }),
-    // v2: Spherical
     spherical: (x, y) => {
       const r2 = x * x + y * y;
       if (r2 === 0) return { x: 0, y: 0 };
       return { x: x / r2, y: y / r2 };
     },
-    // v3: Swirl
     swirl: (x, y) => {
       const r2 = x * x + y * y;
-      const r = Math.sqrt(r2);
       const cos_r2 = Math.cos(r2);
       const sin_r2 = Math.sin(r2);
       return { x: x * sin_r2 - y * cos_r2, y: x * cos_r2 + y * sin_r2 };
+    },
+    horseshoe: (x, y) => {
+      const r = Math.sqrt(x * x + y * y);
+      if (r === 0) return { x: 0, y: 0 };
+      return { x: (x - y) * (x + y) / r, y: 2 * x * y / r };
+    },
+    polar: (x, y) => {
+      const r = Math.sqrt(x * x + y * y);
+      const theta = Math.atan2(y, x);
+      return { x: theta / Math.PI, y: r - 1 };
+    },
+    heart: (x, y) => {
+      const r = Math.sqrt(x * x + y * y);
+      const theta = Math.atan2(y, x) * r;
+      return { x: r * Math.sin(theta), y: -r * Math.cos(theta) };
     }
   };
 
