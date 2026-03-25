@@ -6,14 +6,17 @@ document.addEventListener('DOMContentLoaded', () => {
     gamma: document.getElementById('gamma'),
     brightness: document.getElementById('brightness'),
     quality: document.getElementById('quality'),
+    backgroundMode: document.getElementById('background-mode'),
     gammaValue: document.getElementById('gamma-value'),
     brightnessValue: document.getElementById('brightness-value'),
     qualityValue: document.getElementById('quality-value'),
     addXformBtn: document.getElementById('add-xform-btn'),
     xformsContainer: document.getElementById('xforms-container'),
     loadingIndicator: document.getElementById('loading-indicator'),
+    loadingText: document.querySelector('#loading-indicator span'),
     downloadBtn: document.getElementById('download-btn'),
     randomizeBtn: document.getElementById('randomize-btn'),
+    canvasContainer: document.querySelector('.canvas-container'),
   };
 
   let xformCounter = 0;
@@ -29,68 +32,80 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateSliderValue(slider, label) {
-    // Añadimos una comprobación para evitar el error si el label no se encuentra
     if (!label) return;
-
     label.textContent = slider.id === 'quality'
       ? `${(slider.value / 1000000).toFixed(1)}M`
       : parseFloat(slider.value).toFixed(1);
+  }
+
+  function applyBackgroundMode() {
+    const isTransparent = controls.backgroundMode.value === 'transparent';
+    controls.canvasContainer.classList.toggle('transparent-bg', isTransparent);
   }
 
   function addXform(isInitial = false, coefs = null, variation = 'spherical', color = null) {
     xformCounter++;
     const xformId = `xform-${xformCounter}`;
     const xformHTML = `
-            <div class="xform" id="${xformId}">
-                <div class="xform-header">
-                    <h4>Transformación ${xformCounter}</h4>
-                    <button class="remove-xform-btn" data-target="${xformId}">×</button>
-                </div>
-                <div class="control-group">
-                    <label>Peso</label>
-                    <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="1.0">
-                </div>
-                <div class="control-group">
-                    <label>Color</label>
-                    <input type="color" class="xform-color" value="${color || getRandomColor()}">
-                </div>
-                <div class="control-group">
-                    <label>Variación</label>
-                    <select class="xform-variation">
-                        <option value="linear">Linear</option>
-                        <option value="sinusoidal">Sinusoidal</option>
-                        <option value="spherical">Spherical</option>
-                        <option value="swirl">Swirl</option>
-                        <option value="horseshoe">Horseshoe</option>
-                        <option value="polar">Polar</option>
-                        <option value="heart">Heart</option>
-                        <option value="julia">Julia</option>
-                    </select>
-                </div>
-                <input type="hidden" class="xform-coefs" value="${coefs || getRandomCoefs()}">
-            </div>
-        `;
+      <div class="xform" id="${xformId}">
+        <div class="xform-header">
+          <h4>Transformación ${xformCounter}</h4>
+          <button class="remove-xform-btn" data-target="${xformId}">×</button>
+        </div>
+        <div class="control-group">
+          <label>Peso</label>
+          <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="1.0">
+        </div>
+        <div class="control-group">
+          <label>Color</label>
+          <input type="color" class="xform-color" value="${color || getRandomColor()}">
+        </div>
+        <div class="control-group">
+          <label>Variación</label>
+          <select class="xform-variation">
+            <option value="linear">Linear</option>
+            <option value="sinusoidal">Sinusoidal</option>
+            <option value="spherical">Spherical</option>
+            <option value="swirl">Swirl</option>
+            <option value="horseshoe">Horseshoe</option>
+            <option value="polar">Polar</option>
+            <option value="heart">Heart</option>
+            <option value="julia">Julia</option>
+          </select>
+        </div>
+        <input type="hidden" class="xform-coefs" value="${coefs || getRandomCoefs()}">
+      </div>
+    `;
     controls.xformsContainer.insertAdjacentHTML('beforeend', xformHTML);
-    const newXform = document.getElementById(xformId);
-    newXform.querySelector('.xform-variation').value = variation;
+    document.getElementById(xformId).querySelector('.xform-variation').value = variation;
     if (!isInitial) triggerFullRender();
   }
 
-  function getRandomColor() { return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`; }
-  function getRandomCoefs() { return Array.from({ length: 6 }, () => (Math.random() * 1.8 - 0.9).toFixed(4)).join(','); }
+  function getRandomColor() {
+    return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+  }
+
+  function getRandomCoefs() {
+    return Array.from({ length: 6 }, () => (Math.random() * 1.8 - 0.9).toFixed(4)).join(',');
+  }
 
   function getParamsFromUI(isPreview = false) {
     const params = {
       gamma: parseFloat(controls.gamma.value),
       brightness: parseFloat(controls.brightness.value),
       quality: isPreview ? PREVIEW_QUALITY : parseInt(controls.quality.value),
+      background: controls.backgroundMode.value,
       xforms: []
     };
     document.querySelectorAll('.xform').forEach(el => {
       const colorHex = el.querySelector('.xform-color').value;
       params.xforms.push({
         weight: parseFloat(el.querySelector('.xform-weight').value),
-        color: { r: parseInt(colorHex.slice(1, 3), 16) / 255, g: parseInt(colorHex.slice(3, 5), 16) / 255, b: parseInt(colorHex.slice(5, 7), 16) / 255 },
+        color: {
+          r: parseInt(colorHex.slice(1, 3), 16) / 255,
+          g: parseInt(colorHex.slice(3, 5), 16) / 255,
+          b: parseInt(colorHex.slice(5, 7), 16) / 255
+        },
         variation: el.querySelector('.xform-variation').value,
         coefs: el.querySelector('.xform-coefs').value.split(',').map(Number)
       });
@@ -100,8 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let isRendering = false;
   async function render(isPreview) {
-    if (isRendering && !isPreview) return;
-    if (isRendering && isPreview) return;
+    if (isRendering) return;
     isRendering = true;
 
     if (!isPreview) controls.loadingIndicator.style.display = 'flex';
@@ -112,8 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const renderer = new FlameRenderer(canvas, params);
       await renderer.render();
     } else {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
     }
 
     if (!isPreview) controls.loadingIndicator.style.display = 'none';
@@ -123,16 +136,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const triggerPreviewRender = () => render(true);
   const triggerFullRender = debounce(() => render(false), isMobile ? 500 : 300);
 
-  // ***** AQUÍ ESTÁ LA CORRECCIÓN *****
   function handleControlChange(event) {
     if (event.target.type === 'range') {
-      // Buscamos el ancestro .control-group y luego el .value-display dentro de él.
-      // Esto es mucho más seguro y robusto.
       const controlGroup = event.target.closest('.control-group');
       if (controlGroup) {
         const valueDisplay = controlGroup.querySelector('.value-display');
         updateSliderValue(event.target, valueDisplay);
       }
+    }
+    if (event.target.id === 'background-mode') {
+      applyBackgroundMode();
     }
     triggerPreviewRender();
     triggerFullRender();
@@ -146,20 +159,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const params = getParamsFromUI(false);
     params.quality = isMobile ? 4000000 : 8000000;
 
-    controls.loadingIndicator.querySelector('span').textContent = 'Generando HD...';
+    controls.loadingText.textContent = 'Generando HD...';
     controls.loadingIndicator.style.display = 'flex';
 
     await new Promise(resolve => setTimeout(resolve, 50));
+
     const renderer = new FlameRenderer(tempCanvas, params);
     await renderer.render();
 
-    const link = document.createElement('a');
-    link.download = `fractal-flame-${Date.now()}.png`;
-    link.href = tempCanvas.toDataURL('image/png');
-    link.click();
+    // For dark background download, composite fractal onto black
+    if (params.background !== 'transparent') {
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = 2048;
+      finalCanvas.height = 2048;
+      const finalCtx = finalCanvas.getContext('2d');
+      finalCtx.fillStyle = '#000000';
+      finalCtx.fillRect(0, 0, 2048, 2048);
+      finalCtx.drawImage(tempCanvas, 0, 0);
+      triggerDownload(finalCanvas);
+    } else {
+      triggerDownload(tempCanvas);
+    }
 
     controls.loadingIndicator.style.display = 'none';
-    controls.loadingIndicator.querySelector('span').textContent = 'Renderizando...';
+    controls.loadingText.textContent = 'Renderizando...';
+  }
+
+  function triggerDownload(sourceCanvas) {
+    const link = document.createElement('a');
+    link.download = `fractal-flame-${Date.now()}.png`;
+    link.href = sourceCanvas.toDataURL('image/png');
+    link.click();
   }
 
   function randomizeAll() {
@@ -179,7 +209,10 @@ document.addEventListener('DOMContentLoaded', () => {
     triggerFullRender();
   }
 
+  // Listen for both input (ranges) and change (selects/colors) events
   controls.panel.addEventListener('input', handleControlChange);
+  controls.panel.addEventListener('change', handleControlChange);
+
   controls.addXformBtn.addEventListener('click', () => addXform(false));
   controls.downloadBtn.addEventListener('click', downloadImage);
   controls.randomizeBtn.addEventListener('click', randomizeAll);
@@ -199,6 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSliderValue(controls.brightness, controls.brightnessValue);
     updateSliderValue(controls.quality, controls.qualityValue);
 
+    applyBackgroundMode();
     render(false);
   }
 

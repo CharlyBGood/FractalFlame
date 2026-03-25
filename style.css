@@ -236,6 +236,10 @@ input[type="color"]:hover {
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
+.canvas-container.transparent-bg {
+  background: repeating-conic-gradient(#2a2a35 0% 25%, #1a1a25 0% 50%) 0 0 / 24px 24px;
+}
+
 #loading-indicator {
   position: absolute;
   background: rgba(0, 0, 0, 0.7);

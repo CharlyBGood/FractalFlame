@@ -40,23 +40,23 @@ class FlameRenderer {
         },
     };
 
-    runChaosGame() {
+    async runChaosGame() {
+        const CHUNK_SIZE = 100000;
         let p = { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
         let c = { r: Math.random(), g: Math.random(), b: Math.random() };
 
         let xforms = [...this.params.xforms];
-        
-        // SOLUCIÓN ELEGANTE PARA TRANSFORMACIÓN ÚNICA: Añadir una transformación de identidad
-        // invisible para crear la dinámica fractal necesaria. Esto es crucial.
+
+        // Ensure at least two transforms for proper fractal dynamics
         if (xforms.length === 1) {
             xforms.push({
                 variation: 'linear',
-                coefs: [1, 0, 0, 0, 1, 0], // No hace nada
+                coefs: [1, 0, 0, 0, 1, 0],
                 weight: 0.1,
                 color: { r: c.r, g: c.g, b: c.b }
             });
         }
-        
+
         const totalWeight = xforms.reduce((sum, xf) => sum + xf.weight, 0);
         const cumulativeWeights = [];
         let currentWeight = 0;
@@ -65,31 +65,35 @@ class FlameRenderer {
             cumulativeWeights.push(currentWeight);
         }
 
-        for (let i = 0; i < this.params.quality; i++) {
+        const total = this.params.quality;
+        for (let i = 0; i < total; i++) {
+            // Yield to browser periodically so UI stays responsive
+            if (i > 0 && i % CHUNK_SIZE === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+
             const rand = Math.random();
             let xformIndex = cumulativeWeights.findIndex(w => rand < w);
             if (xformIndex === -1) xformIndex = xforms.length - 1;
-            
-            const xform = xforms[xformIndex];
 
+            const xform = xforms[xformIndex];
             const af = xform.coefs;
             const x_aff = af[0] * p.x + af[1] * p.y + af[2];
             const y_aff = af[3] * p.x + af[4] * p.y + af[5];
 
             const variationFunc = this.variations[xform.variation] || this.variations.linear;
-            let newP = variationFunc(x_aff, y_aff);
-            
-            // Control de estabilidad: si el punto "explota", se reinicia
+            const newP = variationFunc(x_aff, y_aff);
+
+            // Reset if point escapes bounds
             if (!isFinite(newP.x) || !isFinite(newP.y) || Math.hypot(newP.x, newP.y) > 10) {
                 p = { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
                 continue;
             }
             p = newP;
-            
-            const xformColor = xform.color;
-            c.r = (c.r + xformColor.r) / 2;
-            c.g = (c.g + xformColor.g) / 2;
-            c.b = (c.b + xformColor.b) / 2;
+
+            c.r = (c.r + xform.color.r) / 2;
+            c.g = (c.g + xform.color.g) / 2;
+            c.b = (c.b + xform.color.b) / 2;
 
             if (i > 20) this.plotPoint(p, c);
         }
@@ -112,33 +116,36 @@ class FlameRenderer {
     }
 
     renderToCanvas() {
+        const transparent = this.params.background === 'transparent';
         const imageData = this.ctx.createImageData(this.width, this.height);
         const data = imageData.data;
         const logMaxAlpha = this.maxAlpha > 0 ? Math.log10(this.maxAlpha) : 1;
         const gamma = 1 / this.params.gamma;
 
         for (let i = 0; i < this.histogram.length; i++) {
-            const alpha = this.histogram[i][3];
-            if (alpha > 0) {
-                const pixel = this.histogram[i];
-                const brightness = Math.log10(alpha) / logMaxAlpha * this.params.brightness;
-                
-                const r = Math.pow(pixel[0] / alpha * brightness, gamma);
-                const g = Math.pow(pixel[1] / alpha * brightness, gamma);
-                const b = Math.pow(pixel[2] / alpha * brightness, gamma);
+            const hitCount = this.histogram[i][3];
+            if (hitCount === 0) continue;
 
-                const dataIndex = i * 4;
-                data[dataIndex] = r * 255;
-                data[dataIndex + 1] = g * 255;
-                data[dataIndex + 2] = b * 255;
-                data[dataIndex + 3] = 255;
-            }
+            const pixel = this.histogram[i];
+            const brightness = Math.log10(hitCount) / logMaxAlpha * this.params.brightness;
+
+            const r = Math.min(1, Math.pow(pixel[0] / hitCount * brightness, gamma));
+            const g = Math.min(1, Math.pow(pixel[1] / hitCount * brightness, gamma));
+            const b = Math.min(1, Math.pow(pixel[2] / hitCount * brightness, gamma));
+
+            const di = i * 4;
+            data[di]     = Math.floor(r * 255);
+            data[di + 1] = Math.floor(g * 255);
+            data[di + 2] = Math.floor(b * 255);
+            // Transparent mode: use brightness as alpha so faint areas fade out naturally
+            data[di + 3] = transparent ? Math.floor(Math.min(1, brightness) * 255) : 255;
         }
+
         this.ctx.putImageData(imageData, 0, 0);
     }
 
     async render() {
-        this.runChaosGame();
+        await this.runChaosGame();
         this.renderToCanvas();
     }
 }
