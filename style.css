@@ -142,7 +142,7 @@ input[type="color"]:hover {
   padding: 15px;
   margin-bottom: 15px;
   border-radius: 8px;
-  border-left: 4px solid var(--primary-dark);
+  border-left: 4px solid var(--border-color);
   transition: border-color 0.3s;
 }
 
@@ -171,6 +171,78 @@ input[type="color"]:hover {
   color: #ff8080;
 }
 
+/* Coeficientes section */
+.coefs-section {
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+
+.coefs-section > summary {
+  cursor: pointer;
+  color: var(--primary-neon);
+  font-size: 0.8em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 0;
+  user-select: none;
+  list-style: none;
+  outline: none;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+
+.coefs-section > summary:hover {
+  opacity: 1;
+}
+
+.coefs-section > summary::-webkit-details-marker { display: none; }
+
+.coefs-section > summary::before { content: '▸  '; }
+.coefs-section[open] > summary::before { content: '▾  '; }
+
+.coefs-grid {
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.coef-row {
+  display: grid;
+  grid-template-columns: 14px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+}
+
+.coef-label {
+  font-size: 0.78em;
+  color: var(--primary-neon);
+  font-weight: 700;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.coef-val {
+  font-size: 0.74em;
+  text-align: right;
+  color: var(--text-color);
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.coef-row input[type=range] {
+  height: 4px;
+}
+
+.coef-row input[type=range]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  box-shadow: 0 0 4px var(--primary-neon);
+}
+
+/* Action buttons */
 .action-buttons {
   display: flex;
   gap: 10px;
@@ -218,6 +290,7 @@ input[type="color"]:hover {
   box-shadow: 0 0 15px var(--accent-neon);
 }
 
+/* Canvas area */
 .canvas-container {
   flex-grow: 1;
   display: flex;
@@ -263,11 +336,10 @@ input[type="color"]:hover {
 }
 
 @keyframes spin {
-  100% {
-    transform: rotate(360deg);
-  }
+  100% { transform: rotate(360deg); }
 }
 
+/* Responsive */
 @media (max-width: 900px) {
   .main-container {
     flex-direction: column;

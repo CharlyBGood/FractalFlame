@@ -6,10 +6,14 @@ document.addEventListener('DOMContentLoaded', () => {
     gamma: document.getElementById('gamma'),
     brightness: document.getElementById('brightness'),
     quality: document.getElementById('quality'),
+    symmetry: document.getElementById('symmetry'),
+    scale: document.getElementById('scale'),
     backgroundMode: document.getElementById('background-mode'),
     gammaValue: document.getElementById('gamma-value'),
     brightnessValue: document.getElementById('brightness-value'),
     qualityValue: document.getElementById('quality-value'),
+    symmetryValue: document.getElementById('symmetry-value'),
+    scaleValue: document.getElementById('scale-value'),
     addXformBtn: document.getElementById('add-xform-btn'),
     xformsContainer: document.getElementById('xforms-container'),
     loadingIndicator: document.getElementById('loading-indicator'),
@@ -21,7 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let xformCounter = 0;
   const isMobile = window.innerWidth <= 768;
-  const PREVIEW_QUALITY = isMobile ? 80000 : 150000;
+  const PREVIEW_QUALITY = isMobile ? 80000 : 200000;
+
+  // Expansive variations keep the attractor large enough to fill the canvas
+  const EXPANDER_VARIATIONS = ['spherical', 'swirl', 'julia', 'hyperbolic', 'spiral', 'disc', 'horseshoe', 'polar', 'ex'];
+  const GOOD_VARIATIONS = [
+    ...EXPANDER_VARIATIONS,
+    'diamond', 'eyefish', 'bubble', 'heart', 'sinusoidal', 'waves', 'fisheye', 'popcorn', 'pdj'
+  ];
 
   function debounce(func, delay) {
     let timeout;
@@ -33,9 +44,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateSliderValue(slider, label) {
     if (!label) return;
-    label.textContent = slider.id === 'quality'
-      ? `${(slider.value / 1000000).toFixed(1)}M`
-      : parseFloat(slider.value).toFixed(1);
+    if (slider.id === 'quality') {
+      label.textContent = `${(slider.value / 1000000).toFixed(1)}M`;
+    } else if (slider.id === 'symmetry') {
+      label.textContent = slider.value;
+    } else {
+      label.textContent = parseFloat(slider.value).toFixed(1);
+    }
   }
 
   function applyBackgroundMode() {
@@ -43,17 +58,64 @@ document.addEventListener('DOMContentLoaded', () => {
     controls.canvasContainer.classList.toggle('transparent-bg', isTransparent);
   }
 
+  function getRandomColor() {
+    return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+  }
+
+  // Contractive affine coefs via rotation+scale — guarantees the attractor converges
+  function getRandomCoefs() {
+    const s = Math.random() * 0.5 + 0.35;
+    const theta = Math.random() * 2 * Math.PI;
+    const cos = Math.cos(theta), sin = Math.sin(theta);
+    return [
+      (s * cos).toFixed(4),
+      (-s * sin).toFixed(4),
+      (Math.random() * 0.8 - 0.4).toFixed(4),
+      (s * sin).toFixed(4),
+      (s * cos).toFixed(4),
+      (Math.random() * 0.8 - 0.4).toFixed(4)
+    ];
+  }
+
+  function buildVariationOptions(selected) {
+    const groups = [
+      { label: 'Clásicas',   items: ['linear', 'sinusoidal', 'spherical', 'swirl', 'horseshoe', 'polar', 'heart'] },
+      { label: 'Complejas',  items: ['julia', 'disc', 'spiral', 'hyperbolic', 'diamond', 'ex'] },
+      { label: 'Especiales', items: ['eyefish', 'bubble', 'cylinder', 'fisheye', 'bent', 'waves', 'popcorn', 'pdj'] },
+    ];
+    return groups.map(g =>
+      `<optgroup label="${g.label}">` +
+      g.items.map(v =>
+        `<option value="${v}"${v === selected ? ' selected' : ''}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+      ).join('') +
+      `</optgroup>`
+    ).join('');
+  }
+
   function addXform(isInitial = false, coefs = null, variation = 'spherical', color = null) {
     xformCounter++;
     const xformId = `xform-${xformCounter}`;
+    const coefsArray = coefs
+      ? coefs.split(',').map(Number)
+      : getRandomCoefs().map(Number);
+
+    const coefLabels = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const coefsHTML = coefLabels.map((lbl, i) => `
+      <div class="coef-row">
+        <span class="coef-label">${lbl}</span>
+        <input type="range" class="xform-coef" data-coef="${i}" min="-1.5" max="1.5" step="0.01" value="${parseFloat(coefsArray[i]).toFixed(4)}">
+        <span class="coef-val">${parseFloat(coefsArray[i]).toFixed(2)}</span>
+      </div>
+    `).join('');
+
     const xformHTML = `
       <div class="xform" id="${xformId}">
         <div class="xform-header">
-          <h4>Transformación ${xformCounter}</h4>
+          <h4>Transform ${xformCounter}</h4>
           <button class="remove-xform-btn" data-target="${xformId}">×</button>
         </div>
         <div class="control-group">
-          <label>Peso</label>
+          <label>Peso <span class="value-display">1.0</span></label>
           <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="1.0">
         </div>
         <div class="control-group">
@@ -63,30 +125,17 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="control-group">
           <label>Variación</label>
           <select class="xform-variation">
-            <option value="linear">Linear</option>
-            <option value="sinusoidal">Sinusoidal</option>
-            <option value="spherical">Spherical</option>
-            <option value="swirl">Swirl</option>
-            <option value="horseshoe">Horseshoe</option>
-            <option value="polar">Polar</option>
-            <option value="heart">Heart</option>
-            <option value="julia">Julia</option>
+            ${buildVariationOptions(variation)}
           </select>
         </div>
-        <input type="hidden" class="xform-coefs" value="${coefs || getRandomCoefs()}">
+        <details class="coefs-section">
+          <summary>Coeficientes</summary>
+          <div class="coefs-grid">${coefsHTML}</div>
+        </details>
       </div>
     `;
     controls.xformsContainer.insertAdjacentHTML('beforeend', xformHTML);
-    document.getElementById(xformId).querySelector('.xform-variation').value = variation;
     if (!isInitial) triggerFullRender();
-  }
-
-  function getRandomColor() {
-    return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
-  }
-
-  function getRandomCoefs() {
-    return Array.from({ length: 6 }, () => (Math.random() * 1.8 - 0.9).toFixed(4)).join(',');
   }
 
   function getParamsFromUI(isPreview = false) {
@@ -95,10 +144,13 @@ document.addEventListener('DOMContentLoaded', () => {
       brightness: parseFloat(controls.brightness.value),
       quality: isPreview ? PREVIEW_QUALITY : parseInt(controls.quality.value),
       background: controls.backgroundMode.value,
+      symmetry: parseInt(controls.symmetry.value),
+      scale: parseFloat(controls.scale.value),
       xforms: []
     };
     document.querySelectorAll('.xform').forEach(el => {
       const colorHex = el.querySelector('.xform-color').value;
+      const coefs = Array.from(el.querySelectorAll('.xform-coef')).map(s => parseFloat(s.value));
       params.xforms.push({
         weight: parseFloat(el.querySelector('.xform-weight').value),
         color: {
@@ -107,16 +159,22 @@ document.addEventListener('DOMContentLoaded', () => {
           b: parseInt(colorHex.slice(5, 7), 16) / 255
         },
         variation: el.querySelector('.xform-variation').value,
-        coefs: el.querySelector('.xform-coefs').value.split(',').map(Number)
+        coefs
       });
     });
     return params;
   }
 
   let isRendering = false;
+  let pendingFullRender = false;
+
   async function render(isPreview) {
-    if (isRendering) return;
+    if (isRendering) {
+      if (!isPreview) pendingFullRender = true;
+      return;
+    }
     isRendering = true;
+    pendingFullRender = false;
 
     if (!isPreview) controls.loadingIndicator.style.display = 'flex';
 
@@ -131,22 +189,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!isPreview) controls.loadingIndicator.style.display = 'none';
     isRendering = false;
+
+    if (pendingFullRender) {
+      pendingFullRender = false;
+      render(false);
+    }
   }
 
   const triggerPreviewRender = () => render(true);
   const triggerFullRender = debounce(() => render(false), isMobile ? 500 : 300);
 
   function handleControlChange(event) {
-    if (event.target.type === 'range') {
-      const controlGroup = event.target.closest('.control-group');
-      if (controlGroup) {
-        const valueDisplay = controlGroup.querySelector('.value-display');
-        updateSliderValue(event.target, valueDisplay);
+    const t = event.target;
+
+    if (t.type === 'range') {
+      if (t.classList.contains('xform-coef')) {
+        const row = t.closest('.coef-row');
+        if (row) row.querySelector('.coef-val').textContent = parseFloat(t.value).toFixed(2);
+      } else {
+        const group = t.closest('.control-group');
+        if (group) updateSliderValue(t, group.querySelector('.value-display'));
       }
     }
-    if (event.target.id === 'background-mode') {
-      applyBackgroundMode();
-    }
+
+    if (t.id === 'background-mode') applyBackgroundMode();
+
     triggerPreviewRender();
     triggerFullRender();
   }
@@ -167,7 +234,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderer = new FlameRenderer(tempCanvas, params);
     await renderer.render();
 
-    // For dark background download, composite fractal onto black
     if (params.background !== 'transparent') {
       const finalCanvas = document.createElement('canvas');
       finalCanvas.width = 2048;
@@ -195,24 +261,33 @@ document.addEventListener('DOMContentLoaded', () => {
   function randomizeAll() {
     controls.gamma.value = (Math.random() * 2.5 + 1.5).toFixed(1);
     controls.brightness.value = (Math.random() * 8 + 4).toFixed(1);
+    controls.symmetry.value = [1, 1, 1, 2, 2, 3, 3, 4, 5, 6][Math.floor(Math.random() * 10)];
 
-    document.querySelectorAll('.xform').forEach(xform => {
+    document.querySelectorAll('.xform').forEach((xform, idx) => {
       xform.querySelector('.xform-weight').value = (Math.random() * 1.5 + 0.5).toFixed(1);
+      const weightDisplay = xform.querySelector('.xform-weight')?.closest('.control-group')?.querySelector('.value-display');
+      if (weightDisplay) weightDisplay.textContent = xform.querySelector('.xform-weight').value;
+
       xform.querySelector('.xform-color').value = getRandomColor();
-      xform.querySelector('.xform-coefs').value = getRandomCoefs();
-      const variations = Array.from(xform.querySelector('.xform-variation').options);
-      xform.querySelector('.xform-variation').value = variations[Math.floor(Math.random() * variations.length)].value;
+      // First transform always uses an expander so the attractor fills the canvas
+      const pool = idx === 0 ? EXPANDER_VARIATIONS : GOOD_VARIATIONS;
+      xform.querySelector('.xform-variation').value = pool[Math.floor(Math.random() * pool.length)];
+
+      const newCoefs = getRandomCoefs();
+      xform.querySelectorAll('.xform-coef').forEach((coefInput, i) => {
+        coefInput.value = newCoefs[i];
+        coefInput.closest('.coef-row').querySelector('.coef-val').textContent = parseFloat(newCoefs[i]).toFixed(2);
+      });
     });
 
     updateSliderValue(controls.gamma, controls.gammaValue);
     updateSliderValue(controls.brightness, controls.brightnessValue);
+    updateSliderValue(controls.symmetry, controls.symmetryValue);
     triggerFullRender();
   }
 
-  // Listen for both input (ranges) and change (selects/colors) events
   controls.panel.addEventListener('input', handleControlChange);
   controls.panel.addEventListener('change', handleControlChange);
-
   controls.addXformBtn.addEventListener('click', () => addXform(false));
   controls.downloadBtn.addEventListener('click', downloadImage);
   controls.randomizeBtn.addEventListener('click', randomizeAll);
@@ -231,6 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSliderValue(controls.gamma, controls.gammaValue);
     updateSliderValue(controls.brightness, controls.brightnessValue);
     updateSliderValue(controls.quality, controls.qualityValue);
+    updateSliderValue(controls.symmetry, controls.symmetryValue);
+    updateSliderValue(controls.scale, controls.scaleValue);
 
     applyBackgroundMode();
     render(false);

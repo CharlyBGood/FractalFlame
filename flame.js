@@ -6,112 +6,146 @@ class FlameRenderer {
         this.width = canvas.width;
         this.height = canvas.height;
         this.params = params;
-        this.histogram = new Array(this.width * this.height).fill(null).map(() => [0, 0, 0, 0]);
-        this.maxAlpha = 0;
+        this.histogram = new Float32Array(this.width * this.height * 4);
+        this.maxCount = 0;
     }
 
-    variations = {
-        linear: (x, y) => ({ x, y }),
-        sinusoidal: (x, y) => ({ x: Math.sin(x), y: Math.sin(y) }),
-        spherical: (x, y) => {
-            const r2 = x * x + y * y;
-            if (r2 < 1e-6) return { x: 0, y: 0 };
-            return { x: x / r2, y: y / r2 };
-        },
-        swirl: (x, y) => {
-            const r2 = x * x + y * y;
-            return { x: x * Math.sin(r2) - y * Math.cos(r2), y: x * Math.cos(r2) + y * Math.sin(r2) };
-        },
-        horseshoe: (x, y) => {
-            const r = Math.sqrt(x * x + y * y);
-            if (r < 1e-6) return { x: 0, y: 0 };
-            return { x: (x - y) * (x + y) / r, y: 2 * x * y / r };
-        },
-        polar: (x, y) => ({ x: Math.atan2(y, x) / Math.PI, y: Math.sqrt(x * x + y * y) - 1 }),
-        heart: (x, y) => {
-            const r = Math.sqrt(x * x + y * y);
-            const theta = Math.atan2(y, x) * r;
-            return { x: r * Math.sin(theta), y: -r * Math.cos(theta) };
-        },
-        julia: (x, y) => {
-            const r = Math.sqrt(Math.sqrt(x * x + y * y));
-            const theta = Math.atan2(y, x) / 2 + (Math.random() < 0.5 ? 0 : Math.PI);
-            return { x: r * Math.cos(theta), y: r * Math.sin(theta) };
-        },
-    };
+    applyVariation(name, x, y, coefs) {
+        const r2 = x * x + y * y;
+        const r = Math.sqrt(r2);
+        const theta = Math.atan2(y, x);
+
+        switch (name) {
+            case 'linear':     return { x, y };
+            case 'sinusoidal': return { x: Math.sin(x), y: Math.sin(y) };
+            case 'spherical':  return r2 < 1e-10 ? { x: 0, y: 0 } : { x: x / r2, y: y / r2 };
+            case 'swirl':      return { x: x * Math.sin(r2) - y * Math.cos(r2), y: x * Math.cos(r2) + y * Math.sin(r2) };
+            case 'horseshoe':  return r < 1e-10 ? { x: 0, y: 0 } : { x: (x - y) * (x + y) / r, y: 2 * x * y / r };
+            case 'polar':      return { x: theta / Math.PI, y: r - 1 };
+            case 'heart': {
+                const t = theta * r;
+                return { x: r * Math.sin(t), y: -r * Math.cos(t) };
+            }
+            case 'julia': {
+                const sr = Math.pow(r2, 0.25);
+                const t = theta / 2 + (Math.random() < 0.5 ? 0 : Math.PI);
+                return { x: sr * Math.cos(t), y: sr * Math.sin(t) };
+            }
+            case 'disc': {
+                const rpi = r * Math.PI;
+                const tpi = theta / Math.PI;
+                return { x: tpi * Math.sin(rpi), y: tpi * Math.cos(rpi) };
+            }
+            case 'spiral':     return r < 1e-10 ? { x: 0, y: 0 } : { x: (Math.cos(theta) + Math.sin(r)) / r, y: (Math.sin(theta) - Math.cos(r)) / r };
+            case 'hyperbolic': return r < 1e-10 ? { x: 0, y: 0 } : { x: Math.sin(theta) / r, y: r * Math.cos(theta) };
+            case 'diamond':    return { x: Math.sin(theta) * Math.cos(r), y: Math.cos(theta) * Math.sin(r) };
+            case 'ex': {
+                const n0 = Math.sin(theta + r), n1 = Math.cos(theta - r);
+                const n03 = n0 * n0 * n0, n13 = n1 * n1 * n1;
+                return { x: r * (n03 + n13), y: r * (n03 - n13) };
+            }
+            case 'eyefish': {
+                const s = 2 / (r + 1);
+                return { x: s * x, y: s * y };
+            }
+            case 'bubble': {
+                const s = 4 / (r2 + 4);
+                return { x: s * x, y: s * y };
+            }
+            case 'cylinder':   return { x: Math.sin(x), y };
+            case 'fisheye': {
+                const s = 2 / (r + 1);
+                return { x: s * y, y: s * x };
+            }
+            case 'bent':       return { x: x < 0 ? 2 * x : x, y: y < 0 ? y / 2 : y };
+            case 'waves': {
+                const b = coefs[1], c = coefs[2], e = coefs[4], f = coefs[5];
+                return { x: x + b * Math.sin(y / (c * c + 1e-8)), y: y + e * Math.sin(x / (f * f + 1e-8)) };
+            }
+            case 'popcorn': {
+                const cv = coefs[2] || 0.1, fv = coefs[5] || 0.1;
+                return { x: x + cv * Math.sin(Math.tan(3 * y)), y: y + fv * Math.sin(Math.tan(3 * x)) };
+            }
+            case 'pdj': {
+                const [a, b, c, d] = coefs;
+                return { x: Math.sin(a * y) - Math.cos(b * x), y: Math.sin(c * x) - Math.cos(d * y) };
+            }
+            default: return { x, y };
+        }
+    }
+
+    plotPoint(px, py, cr, cg, cb) {
+        const scale = this.params.scale || 3.0;
+        const cx = Math.floor(this.width / 2 + px * (this.width / scale));
+        const cy = Math.floor(this.height / 2 - py * (this.height / scale));
+        if (cx >= 0 && cx < this.width && cy >= 0 && cy < this.height) {
+            const idx = (cy * this.width + cx) * 4;
+            this.histogram[idx]     += cr;
+            this.histogram[idx + 1] += cg;
+            this.histogram[idx + 2] += cb;
+            this.histogram[idx + 3]++;
+            if (this.histogram[idx + 3] > this.maxCount) this.maxCount = this.histogram[idx + 3];
+        }
+    }
 
     async runChaosGame() {
         const CHUNK_SIZE = 100000;
-        let p = { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
-        let c = { r: Math.random(), g: Math.random(), b: Math.random() };
+        let px = Math.random() * 2 - 1, py = Math.random() * 2 - 1;
+        let cr = Math.random(), cg = Math.random(), cb = Math.random();
 
-        let xforms = [...this.params.xforms];
-
-        // Ensure at least two transforms for proper fractal dynamics
+        const xforms = [...this.params.xforms];
         if (xforms.length === 1) {
-            xforms.push({
-                variation: 'linear',
-                coefs: [1, 0, 0, 0, 1, 0],
-                weight: 0.1,
-                color: { r: c.r, g: c.g, b: c.b }
-            });
+            xforms.push({ variation: 'linear', coefs: [0.5, 0, 0, 0, 0.5, 0], weight: 0.1, color: { r: 1, g: 1, b: 1 } });
         }
 
-        const totalWeight = xforms.reduce((sum, xf) => sum + xf.weight, 0);
-        const cumulativeWeights = [];
-        let currentWeight = 0;
-        for (const xform of xforms) {
-            currentWeight += xform.weight / totalWeight;
-            cumulativeWeights.push(currentWeight);
-        }
+        const totalWeight = xforms.reduce((s, xf) => s + xf.weight, 0);
+        const cumWeights = [];
+        let cw = 0;
+        for (const xf of xforms) { cw += xf.weight / totalWeight; cumWeights.push(cw); }
+
+        const symmetry = this.params.symmetry || 1;
+        const symAngles = Array.from({ length: symmetry - 1 }, (_, k) => 2 * Math.PI * (k + 1) / symmetry);
+        const symCos = symAngles.map(Math.cos);
+        const symSin = symAngles.map(Math.sin);
 
         const total = this.params.quality;
         for (let i = 0; i < total; i++) {
-            // Yield to browser periodically so UI stays responsive
             if (i > 0 && i % CHUNK_SIZE === 0) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(r => setTimeout(r, 0));
             }
 
             const rand = Math.random();
-            let xformIndex = cumulativeWeights.findIndex(w => rand < w);
-            if (xformIndex === -1) xformIndex = xforms.length - 1;
+            let xi = 0;
+            while (xi < cumWeights.length - 1 && cumWeights[xi] < rand) xi++;
 
-            const xform = xforms[xformIndex];
-            const af = xform.coefs;
-            const x_aff = af[0] * p.x + af[1] * p.y + af[2];
-            const y_aff = af[3] * p.x + af[4] * p.y + af[5];
+            const xf = xforms[xi];
+            const af = xf.coefs;
+            const xa = af[0] * px + af[1] * py + af[2];
+            const ya = af[3] * px + af[4] * py + af[5];
+            const np = this.applyVariation(xf.variation, xa, ya, af);
 
-            const variationFunc = this.variations[xform.variation] || this.variations.linear;
-            const newP = variationFunc(x_aff, y_aff);
-
-            // Reset if point escapes bounds
-            if (!isFinite(newP.x) || !isFinite(newP.y) || Math.hypot(newP.x, newP.y) > 10) {
-                p = { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 };
+            if (!isFinite(np.x) || !isFinite(np.y) || Math.hypot(np.x, np.y) > 10) {
+                px = Math.random() * 2 - 1;
+                py = Math.random() * 2 - 1;
                 continue;
             }
-            p = newP;
+            px = np.x;
+            py = np.y;
 
-            c.r = (c.r + xform.color.r) / 2;
-            c.g = (c.g + xform.color.g) / 2;
-            c.b = (c.b + xform.color.b) / 2;
+            cr = (cr + xf.color.r) / 2;
+            cg = (cg + xf.color.g) / 2;
+            cb = (cb + xf.color.b) / 2;
 
-            if (i > 20) this.plotPoint(p, c);
-        }
-    }
-
-    plotPoint(p, c) {
-        const scale = 4.0;
-        const canvasX = Math.floor(this.width / 2 + p.x * (this.width / scale));
-        const canvasY = Math.floor(this.height / 2 - p.y * (this.height / scale));
-
-        if (canvasX >= 0 && canvasX < this.width && canvasY >= 0 && canvasY < this.height) {
-            const index = canvasY * this.width + canvasX;
-            const pixel = this.histogram[index];
-            pixel[0] += c.r;
-            pixel[1] += c.g;
-            pixel[2] += c.b;
-            pixel[3]++;
-            if (pixel[3] > this.maxAlpha) this.maxAlpha = pixel[3];
+            if (i > 20) {
+                this.plotPoint(px, py, cr, cg, cb);
+                for (let s = 0; s < symAngles.length; s++) {
+                    this.plotPoint(
+                        px * symCos[s] - py * symSin[s],
+                        px * symSin[s] + py * symCos[s],
+                        cr, cg, cb
+                    );
+                }
+            }
         }
     }
 
@@ -119,26 +153,23 @@ class FlameRenderer {
         const transparent = this.params.background === 'transparent';
         const imageData = this.ctx.createImageData(this.width, this.height);
         const data = imageData.data;
-        const logMaxAlpha = this.maxAlpha > 0 ? Math.log10(this.maxAlpha) : 1;
+        const logMax = this.maxCount > 0 ? Math.log10(this.maxCount) : 1;
         const gamma = 1 / this.params.gamma;
 
-        for (let i = 0; i < this.histogram.length; i++) {
-            const hitCount = this.histogram[i][3];
-            if (hitCount === 0) continue;
+        for (let i = 0; i < this.width * this.height; i++) {
+            const idx = i * 4;
+            const count = this.histogram[idx + 3];
+            if (count === 0) continue;
 
-            const pixel = this.histogram[i];
-            const brightness = Math.log10(hitCount) / logMaxAlpha * this.params.brightness;
+            const brightness = Math.log10(count) / logMax * this.params.brightness;
+            const r = Math.min(1, Math.pow(this.histogram[idx]     / count * brightness, gamma));
+            const g = Math.min(1, Math.pow(this.histogram[idx + 1] / count * brightness, gamma));
+            const b = Math.min(1, Math.pow(this.histogram[idx + 2] / count * brightness, gamma));
 
-            const r = Math.min(1, Math.pow(pixel[0] / hitCount * brightness, gamma));
-            const g = Math.min(1, Math.pow(pixel[1] / hitCount * brightness, gamma));
-            const b = Math.min(1, Math.pow(pixel[2] / hitCount * brightness, gamma));
-
-            const di = i * 4;
-            data[di]     = Math.floor(r * 255);
-            data[di + 1] = Math.floor(g * 255);
-            data[di + 2] = Math.floor(b * 255);
-            // Transparent mode: use brightness as alpha so faint areas fade out naturally
-            data[di + 3] = transparent ? Math.floor(Math.min(1, brightness) * 255) : 255;
+            data[idx]     = r * 255;
+            data[idx + 1] = g * 255;
+            data[idx + 2] = b * 255;
+            data[idx + 3] = transparent ? Math.min(255, brightness * 255) : 255;
         }
 
         this.ctx.putImageData(imageData, 0, 0);
