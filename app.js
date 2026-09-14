@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scaleValue: document.getElementById('scale-value'),
     addXformBtn: document.getElementById('add-xform-btn'),
     xformsContainer: document.getElementById('xforms-container'),
+    paletteGrid: document.getElementById('palette-grid'),
     loadingIndicator: document.getElementById('loading-indicator'),
     loadingText: document.querySelector('#loading-indicator span'),
     downloadBtn: document.getElementById('download-btn'),
@@ -27,12 +28,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const isMobile = window.innerWidth <= 768;
   const PREVIEW_QUALITY = isMobile ? 80000 : 200000;
 
-  // Expansive variations keep the attractor large enough to fill the canvas
-  const EXPANDER_VARIATIONS = ['spherical', 'swirl', 'julia', 'hyperbolic', 'spiral', 'disc', 'horseshoe', 'polar', 'ex'];
-  const GOOD_VARIATIONS = [
-    ...EXPANDER_VARIATIONS,
-    'diamond', 'eyefish', 'bubble', 'heart', 'sinusoidal', 'waves', 'fisheye', 'popcorn', 'pdj'
+  const PALETTES = [
+    { name: 'Fuego',   colors: ['#ff5500', '#ff9900', '#ffee00', '#ff2200'] },
+    { name: 'Océano',  colors: ['#00b4d8', '#0077b6', '#90e0ef', '#023e8a'] },
+    { name: 'Magenta', colors: ['#ff00cc', '#aa00ff', '#ff0066', '#ff9900'] },
+    { name: 'Neón',    colors: ['#00ffcc', '#00ccff', '#ffff00', '#ff00aa'] },
+    { name: 'Cosmos',  colors: ['#9b00ff', '#cc77ff', '#ff77dd', '#5500aa'] },
+    { name: 'Aurora',  colors: ['#00ff88', '#00ccff', '#ff00ff', '#ffaa00'] },
   ];
+
+  const EXPANDER_VARIATIONS = ['spherical', 'swirl', 'julia', 'disc', 'horseshoe', 'ex'];
+  const ALL_VARIATIONS = [...EXPANDER_VARIATIONS, 'diamond', 'sinusoidal'];
 
   function debounce(func, delay) {
     let timeout;
@@ -42,71 +48,69 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  function updateSliderValue(slider, label) {
-    if (!label) return;
-    if (slider.id === 'quality') {
-      label.textContent = `${(slider.value / 1000000).toFixed(1)}M`;
-    } else if (slider.id === 'symmetry') {
-      label.textContent = slider.value;
-    } else {
-      label.textContent = parseFloat(slider.value).toFixed(1);
-    }
-  }
-
   function applyBackgroundMode() {
-    const isTransparent = controls.backgroundMode.value === 'transparent';
-    controls.canvasContainer.classList.toggle('transparent-bg', isTransparent);
+    controls.canvasContainer.classList.toggle('transparent-bg', controls.backgroundMode.value === 'transparent');
   }
 
   function getRandomColor() {
     return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
   }
 
-  // Contractive affine coefs via rotation+scale — guarantees the attractor converges
-  function getRandomCoefs() {
-    const s = Math.random() * 0.5 + 0.35;
-    const theta = Math.random() * 2 * Math.PI;
-    const cos = Math.cos(theta), sin = Math.sin(theta);
-    return [
-      (s * cos).toFixed(4),
-      (-s * sin).toFixed(4),
-      (Math.random() * 0.8 - 0.4).toFixed(4),
-      (s * sin).toFixed(4),
-      (s * cos).toFixed(4),
-      (Math.random() * 0.8 - 0.4).toFixed(4)
-    ];
+  function buildPaletteGrid() {
+    PALETTES.forEach((palette, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'palette-btn';
+      btn.dataset.paletteIdx = idx;
+      btn.title = palette.name;
+      btn.innerHTML = palette.colors.map(c => `<span class="palette-swatch" style="background:${c}"></span>`).join('');
+      controls.paletteGrid.appendChild(btn);
+    });
   }
 
-  function buildVariationOptions(selected) {
-    const groups = [
-      { label: 'Clásicas',   items: ['linear', 'sinusoidal', 'spherical', 'swirl', 'horseshoe', 'polar', 'heart'] },
-      { label: 'Complejas',  items: ['julia', 'disc', 'spiral', 'hyperbolic', 'diamond', 'ex'] },
-      { label: 'Especiales', items: ['eyefish', 'bubble', 'cylinder', 'fisheye', 'bent', 'waves', 'popcorn', 'pdj'] },
-    ];
-    return groups.map(g =>
-      `<optgroup label="${g.label}">` +
-      g.items.map(v =>
-        `<option value="${v}"${v === selected ? ' selected' : ''}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
-      ).join('') +
-      `</optgroup>`
-    ).join('');
+  function setActivePalette(idx) {
+    document.querySelectorAll('.palette-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
   }
 
-  function addXform(isInitial = false, coefs = null, variation = 'spherical', color = null) {
+  function applyPalette(palette) {
+    document.querySelectorAll('.xform').forEach((xform, i) => {
+      xform.querySelector('.xform-color').value = palette.colors[i % palette.colors.length];
+    });
+  }
+
+  function updateXformDisplays(xform) {
+    const rot = xform.querySelector('.xform-rotation');
+    const dispOf = el => el?.closest('.control-group')?.querySelector('.value-display');
+    if (rot) { const d = dispOf(rot); if (d) d.textContent = `${Math.round(rot.value)}°`; }
+    ['xform-scale-r', 'xform-tx', 'xform-ty'].forEach(cls => {
+      const el = xform.querySelector('.' + cls);
+      if (el) { const d = dispOf(el); if (d) d.textContent = parseFloat(el.value).toFixed(2); }
+    });
+    const wt = xform.querySelector('.xform-weight');
+    if (wt) { const d = dispOf(wt); if (d) d.textContent = parseFloat(wt.value).toFixed(1); }
+  }
+
+  function addXform(isInitial = false, opts = {}) {
     xformCounter++;
     const xformId = `xform-${xformCounter}`;
-    const coefsArray = coefs
-      ? coefs.split(',').map(Number)
-      : getRandomCoefs().map(Number);
 
-    const coefLabels = ['a', 'b', 'c', 'd', 'e', 'f'];
-    const coefsHTML = coefLabels.map((lbl, i) => `
-      <div class="coef-row">
-        <span class="coef-label">${lbl}</span>
-        <input type="range" class="xform-coef" data-coef="${i}" min="-1.5" max="1.5" step="0.01" value="${parseFloat(coefsArray[i]).toFixed(4)}">
-        <span class="coef-val">${parseFloat(coefsArray[i]).toFixed(2)}</span>
-      </div>
-    `).join('');
+    const rotation = opts.rotation ?? Math.floor(Math.random() * 360);
+    const scale    = opts.scale    ?? +(Math.random() * 0.4 + 0.45).toFixed(2);
+    const tx       = opts.tx       ?? +(Math.random() * 0.6 - 0.3).toFixed(2);
+    const ty       = opts.ty       ?? +(Math.random() * 0.6 - 0.3).toFixed(2);
+    const weight   = opts.weight   ?? 1.0;
+    const variation = opts.variation ?? 'spherical';
+    const color    = opts.color    ?? getRandomColor();
+
+    const VARIATION_OPTIONS = [
+      { value: 'spherical',  label: 'Spherical'  },
+      { value: 'swirl',      label: 'Swirl'      },
+      { value: 'julia',      label: 'Julia'      },
+      { value: 'disc',       label: 'Disc'       },
+      { value: 'horseshoe',  label: 'Horseshoe'  },
+      { value: 'ex',         label: 'Ex'         },
+      { value: 'diamond',    label: 'Diamond'    },
+      { value: 'sinusoidal', label: 'Sinusoidal' },
+    ];
 
     const xformHTML = `
       <div class="xform" id="${xformId}">
@@ -115,23 +119,37 @@ document.addEventListener('DOMContentLoaded', () => {
           <button class="remove-xform-btn" data-target="${xformId}">×</button>
         </div>
         <div class="control-group">
-          <label>Peso <span class="value-display">1.0</span></label>
-          <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="1.0">
+          <label>Variación</label>
+          <select class="xform-variation">
+            ${VARIATION_OPTIONS.map(v => `<option value="${v.value}"${v.value === variation ? ' selected' : ''}>${v.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Rotación <span class="value-display">${Math.round(rotation)}°</span></label>
+          <input type="range" class="xform-rotation" min="0" max="359" step="1" value="${rotation}">
+        </div>
+        <div class="control-group">
+          <label>Escala <span class="value-display">${(+scale).toFixed(2)}</span></label>
+          <input type="range" class="xform-scale-r" min="0.2" max="0.95" step="0.01" value="${scale}">
+        </div>
+        <div class="twin-group">
+          <div class="control-group">
+            <label>X <span class="value-display">${(+tx).toFixed(2)}</span></label>
+            <input type="range" class="xform-tx" min="-0.7" max="0.7" step="0.01" value="${tx}">
+          </div>
+          <div class="control-group">
+            <label>Y <span class="value-display">${(+ty).toFixed(2)}</span></label>
+            <input type="range" class="xform-ty" min="-0.7" max="0.7" step="0.01" value="${ty}">
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Peso <span class="value-display">${(+weight).toFixed(1)}</span></label>
+          <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="${weight}">
         </div>
         <div class="control-group">
           <label>Color</label>
-          <input type="color" class="xform-color" value="${color || getRandomColor()}">
+          <input type="color" class="xform-color" value="${color}">
         </div>
-        <div class="control-group">
-          <label>Variación</label>
-          <select class="xform-variation">
-            ${buildVariationOptions(variation)}
-          </select>
-        </div>
-        <details class="coefs-section">
-          <summary>Coeficientes</summary>
-          <div class="coefs-grid">${coefsHTML}</div>
-        </details>
       </div>
     `;
     controls.xformsContainer.insertAdjacentHTML('beforeend', xformHTML);
@@ -148,9 +166,14 @@ document.addEventListener('DOMContentLoaded', () => {
       scale: parseFloat(controls.scale.value),
       xforms: []
     };
+
     document.querySelectorAll('.xform').forEach(el => {
+      const rotation = parseFloat(el.querySelector('.xform-rotation').value) * Math.PI / 180;
+      const s        = parseFloat(el.querySelector('.xform-scale-r').value);
+      const tx       = parseFloat(el.querySelector('.xform-tx').value);
+      const ty       = parseFloat(el.querySelector('.xform-ty').value);
       const colorHex = el.querySelector('.xform-color').value;
-      const coefs = Array.from(el.querySelectorAll('.xform-coef')).map(s => parseFloat(s.value));
+
       params.xforms.push({
         weight: parseFloat(el.querySelector('.xform-weight').value),
         color: {
@@ -159,9 +182,13 @@ document.addEventListener('DOMContentLoaded', () => {
           b: parseInt(colorHex.slice(5, 7), 16) / 255
         },
         variation: el.querySelector('.xform-variation').value,
-        coefs
+        coefs: [
+          s * Math.cos(rotation), -s * Math.sin(rotation), tx,
+          s * Math.sin(rotation),  s * Math.cos(rotation), ty
+        ]
       });
     });
+
     return params;
   }
 
@@ -203,12 +230,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = event.target;
 
     if (t.type === 'range') {
-      if (t.classList.contains('xform-coef')) {
-        const row = t.closest('.coef-row');
-        if (row) row.querySelector('.coef-val').textContent = parseFloat(t.value).toFixed(2);
-      } else {
-        const group = t.closest('.control-group');
-        if (group) updateSliderValue(t, group.querySelector('.value-display'));
+      const group = t.closest('.control-group');
+      const display = group?.querySelector('.value-display');
+      if (display) {
+        if (t.classList.contains('xform-rotation')) {
+          display.textContent = `${Math.round(parseFloat(t.value))}°`;
+        } else if (t.id === 'quality') {
+          display.textContent = `${(t.value / 1000000).toFixed(1)}M`;
+        } else if (t.id === 'symmetry') {
+          display.textContent = t.value;
+        } else if (t.classList.contains('xform-weight')) {
+          display.textContent = parseFloat(t.value).toFixed(1);
+        } else {
+          display.textContent = parseFloat(t.value).toFixed(2);
+        }
       }
     }
 
@@ -259,30 +294,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function randomizeAll() {
-    controls.gamma.value = (Math.random() * 2.5 + 1.5).toFixed(1);
-    controls.brightness.value = (Math.random() * 8 + 4).toFixed(1);
-    controls.symmetry.value = [1, 1, 1, 2, 2, 3, 3, 4, 5, 6][Math.floor(Math.random() * 10)];
+    controls.brightness.value = (Math.random() * 6 + 3).toFixed(1);
+    controls.symmetry.value = [1, 1, 2, 2, 3, 3, 4, 5, 6][Math.floor(Math.random() * 9)];
+
+    const paletteIdx = Math.floor(Math.random() * PALETTES.length);
+    const palette = PALETTES[paletteIdx];
+    setActivePalette(paletteIdx);
 
     document.querySelectorAll('.xform').forEach((xform, idx) => {
-      xform.querySelector('.xform-weight').value = (Math.random() * 1.5 + 0.5).toFixed(1);
-      const weightDisplay = xform.querySelector('.xform-weight')?.closest('.control-group')?.querySelector('.value-display');
-      if (weightDisplay) weightDisplay.textContent = xform.querySelector('.xform-weight').value;
+      xform.querySelector('.xform-rotation').value = Math.floor(Math.random() * 360);
+      xform.querySelector('.xform-scale-r').value  = (Math.random() * 0.4 + 0.45).toFixed(2);
+      xform.querySelector('.xform-tx').value        = (Math.random() * 0.6 - 0.3).toFixed(2);
+      xform.querySelector('.xform-ty').value        = (Math.random() * 0.6 - 0.3).toFixed(2);
+      xform.querySelector('.xform-weight').value    = (Math.random() * 1.2 + 0.5).toFixed(1);
+      xform.querySelector('.xform-color').value     = palette.colors[idx % palette.colors.length];
 
-      xform.querySelector('.xform-color').value = getRandomColor();
-      // First transform always uses an expander so the attractor fills the canvas
-      const pool = idx === 0 ? EXPANDER_VARIATIONS : GOOD_VARIATIONS;
+      const pool = idx === 0 ? EXPANDER_VARIATIONS : ALL_VARIATIONS;
       xform.querySelector('.xform-variation').value = pool[Math.floor(Math.random() * pool.length)];
 
-      const newCoefs = getRandomCoefs();
-      xform.querySelectorAll('.xform-coef').forEach((coefInput, i) => {
-        coefInput.value = newCoefs[i];
-        coefInput.closest('.coef-row').querySelector('.coef-val').textContent = parseFloat(newCoefs[i]).toFixed(2);
-      });
+      updateXformDisplays(xform);
     });
 
-    updateSliderValue(controls.gamma, controls.gammaValue);
-    updateSliderValue(controls.brightness, controls.brightnessValue);
-    updateSliderValue(controls.symmetry, controls.symmetryValue);
+    const brightnessDisplay = controls.brightness.closest('.control-group')?.querySelector('.value-display');
+    if (brightnessDisplay) brightnessDisplay.textContent = parseFloat(controls.brightness.value).toFixed(1);
+    const symDisplay = controls.symmetry.closest('.control-group')?.querySelector('.value-display');
+    if (symDisplay) symDisplay.textContent = controls.symmetry.value;
+
     triggerFullRender();
   }
 
@@ -292,7 +329,16 @@ document.addEventListener('DOMContentLoaded', () => {
   controls.downloadBtn.addEventListener('click', downloadImage);
   controls.randomizeBtn.addEventListener('click', randomizeAll);
 
-  controls.xformsContainer.addEventListener('click', (e) => {
+  controls.paletteGrid.addEventListener('click', e => {
+    const btn = e.target.closest('.palette-btn');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.paletteIdx);
+    setActivePalette(idx);
+    applyPalette(PALETTES[idx]);
+    triggerFullRender();
+  });
+
+  controls.xformsContainer.addEventListener('click', e => {
     if (e.target.classList.contains('remove-xform-btn')) {
       document.getElementById(e.target.dataset.target)?.remove();
       triggerFullRender();
@@ -300,14 +346,22 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function initialize() {
-    addXform(true, "0.824,-0.412,0.1,0.354,0.796,0.1", 'spherical', '#ff8d00');
-    addXform(true, "-0.383,0.421,0.4,-0.642,-0.274,0.4", 'julia', '#00aaff');
+    buildPaletteGrid();
 
-    updateSliderValue(controls.gamma, controls.gammaValue);
-    updateSliderValue(controls.brightness, controls.brightnessValue);
-    updateSliderValue(controls.quality, controls.qualityValue);
-    updateSliderValue(controls.symmetry, controls.symmetryValue);
-    updateSliderValue(controls.scale, controls.scaleValue);
+    addXform(true, { rotation: 48,  scale: 0.65, tx:  0.10, ty:  0.10, variation: 'spherical', color: PALETTES[0].colors[0] });
+    addXform(true, { rotation: 210, scale: 0.55, tx: -0.20, ty:  0.20, variation: 'julia',     color: PALETTES[0].colors[1] });
+
+    setActivePalette(0);
+
+    // Init global displays
+    const initDisplay = (el, valueEl, formatter) => {
+      if (el && valueEl) valueEl.textContent = formatter(el.value);
+    };
+    initDisplay(controls.gamma,      controls.gammaValue,      v => parseFloat(v).toFixed(1));
+    initDisplay(controls.brightness, controls.brightnessValue, v => parseFloat(v).toFixed(1));
+    initDisplay(controls.quality,    controls.qualityValue,    v => `${(v / 1000000).toFixed(1)}M`);
+    initDisplay(controls.symmetry,   controls.symmetryValue,   v => v);
+    initDisplay(controls.scale,      controls.scaleValue,      v => parseFloat(v).toFixed(1));
 
     applyBackgroundMode();
     render(false);
