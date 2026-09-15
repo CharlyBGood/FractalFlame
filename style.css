@@ -78,6 +78,30 @@ header p {
 
 .attribution a:hover { opacity: 1; }
 
+.gradient-link {
+  background: linear-gradient(90deg, #ec4899, #facc15, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent !important;
+  text-decoration: none;
+  position: relative;
+  opacity: 1 !important;
+}
+
+.gradient-link::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg, #ec4899, #facc15, #3b82f6);
+  transition: width 0.3s ease;
+}
+
+.gradient-link:hover::after { width: 100%; }
+
 /* ── Section label ── */
 .section-label {
   font-size: 0.75em;
