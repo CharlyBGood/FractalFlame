@@ -63,6 +63,21 @@ header p {
   opacity: 0.6;
 }
 
+.attribution {
+  font-size: 0.72em !important;
+  margin-top: 5px !important;
+  opacity: 0.45 !important;
+}
+
+.attribution a {
+  color: var(--primary-neon);
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.attribution a:hover { opacity: 1; }
+
 /* ── Section label ── */
 .section-label {
   font-size: 0.75em;
