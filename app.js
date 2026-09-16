@@ -75,7 +75,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyPalette(palette) {
     document.querySelectorAll('.xform').forEach((xform, i) => {
-      xform.querySelector('.xform-color').value = palette.colors[i % palette.colors.length];
+      const color = palette.colors[i % palette.colors.length];
+      xform.querySelector('.xform-color').value = color;
+      const dot = xform.querySelector('.xform-color-dot');
+      if (dot) dot.style.background = color;
     });
   }
 
@@ -115,44 +118,47 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const xformHTML = `
-      <div class="xform" id="${xformId}">
-        <div class="xform-header">
+      <details class="xform" id="${xformId}" open>
+        <summary class="xform-header">
           <h4>Transform ${xformCounter}</h4>
-          <button class="remove-xform-btn" data-target="${xformId}">×</button>
-        </div>
-        <div class="control-group">
-          <label>Variación</label>
-          <select class="xform-variation">
-            ${VARIATION_OPTIONS.map(v => `<option value="${v.value}"${v.value === variation ? ' selected' : ''}>${v.label}</option>`).join('')}
-          </select>
-        </div>
-        <div class="control-group">
-          <label>Rotación <span class="value-display">${Math.round(rotation)}°</span></label>
-          <input type="range" class="xform-rotation" min="0" max="359" step="1" value="${rotation}">
-        </div>
-        <div class="control-group">
-          <label>Escala <span class="value-display">${(+scale).toFixed(2)}</span></label>
-          <input type="range" class="xform-scale-r" min="0.2" max="0.95" step="0.01" value="${scale}">
-        </div>
-        <div class="twin-group">
+          <span class="xform-color-dot" style="background:${color}"></span>
+          <button class="remove-xform-btn" data-target="${xformId}" type="button">×</button>
+        </summary>
+        <div class="xform-body">
           <div class="control-group">
-            <label>X <span class="value-display">${(+tx).toFixed(2)}</span></label>
-            <input type="range" class="xform-tx" min="-0.7" max="0.7" step="0.01" value="${tx}">
+            <label>Variación</label>
+            <select class="xform-variation">
+              ${VARIATION_OPTIONS.map(v => `<option value="${v.value}"${v.value === variation ? ' selected' : ''}>${v.label}</option>`).join('')}
+            </select>
           </div>
           <div class="control-group">
-            <label>Y <span class="value-display">${(+ty).toFixed(2)}</span></label>
-            <input type="range" class="xform-ty" min="-0.7" max="0.7" step="0.01" value="${ty}">
+            <label>Rotación <span class="value-display">${Math.round(rotation)}°</span></label>
+            <input type="range" class="xform-rotation" min="0" max="359" step="1" value="${rotation}">
+          </div>
+          <div class="control-group">
+            <label>Escala <span class="value-display">${(+scale).toFixed(2)}</span></label>
+            <input type="range" class="xform-scale-r" min="0.2" max="0.95" step="0.01" value="${scale}">
+          </div>
+          <div class="twin-group">
+            <div class="control-group">
+              <label>X <span class="value-display">${(+tx).toFixed(2)}</span></label>
+              <input type="range" class="xform-tx" min="-0.7" max="0.7" step="0.01" value="${tx}">
+            </div>
+            <div class="control-group">
+              <label>Y <span class="value-display">${(+ty).toFixed(2)}</span></label>
+              <input type="range" class="xform-ty" min="-0.7" max="0.7" step="0.01" value="${ty}">
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Peso <span class="value-display">${(+weight).toFixed(1)}</span></label>
+            <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="${weight}">
+          </div>
+          <div class="control-group">
+            <label>Color</label>
+            <input type="color" class="xform-color" value="${color}">
           </div>
         </div>
-        <div class="control-group">
-          <label>Peso <span class="value-display">${(+weight).toFixed(1)}</span></label>
-          <input type="range" class="xform-weight" min="0.1" max="2" step="0.1" value="${weight}">
-        </div>
-        <div class="control-group">
-          <label>Color</label>
-          <input type="color" class="xform-color" value="${color}">
-        </div>
-      </div>
+      </details>
     `;
     controls.xformsContainer.insertAdjacentHTML('beforeend', xformHTML);
     if (!isInitial) triggerFullRender();
@@ -250,6 +256,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (t.id === 'background-mode') applyBackgroundMode();
+
+    if (t.classList.contains('xform-color')) {
+      const dot = t.closest('.xform')?.querySelector('.xform-color-dot');
+      if (dot) dot.style.background = t.value;
+    }
 
     triggerPreviewRender();
     triggerFullRender();
@@ -349,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   controls.xformsContainer.addEventListener('click', e => {
     if (e.target.classList.contains('remove-xform-btn')) {
+      e.preventDefault();
       document.getElementById(e.target.dataset.target)?.remove();
       triggerFullRender();
     }
