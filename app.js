@@ -61,8 +61,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = document.createElement('button');
       btn.className = 'palette-btn';
       btn.dataset.paletteIdx = idx;
-      btn.title = palette.name;
-      btn.innerHTML = palette.colors.map(c => `<span class="palette-swatch" style="background:${c}"></span>`).join('');
+      btn.innerHTML = `
+        <span class="palette-swatches">${palette.colors.map(c => `<span class="palette-swatch" style="background:${c}"></span>`).join('')}</span>
+        <span class="palette-name">${palette.name}</span>
+      `;
       controls.paletteGrid.appendChild(btn);
     });
   }
@@ -294,31 +296,38 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function randomizeAll() {
-    controls.brightness.value = (Math.random() * 6 + 3).toFixed(1);
-    controls.symmetry.value = [1, 1, 2, 2, 3, 3, 4, 5, 6][Math.floor(Math.random() * 9)];
-
     const paletteIdx = Math.floor(Math.random() * PALETTES.length);
     const palette = PALETTES[paletteIdx];
     setActivePalette(paletteIdx);
 
-    document.querySelectorAll('.xform').forEach((xform, idx) => {
-      xform.querySelector('.xform-rotation').value = Math.floor(Math.random() * 360);
-      xform.querySelector('.xform-scale-r').value  = (Math.random() * 0.4 + 0.45).toFixed(2);
-      xform.querySelector('.xform-tx').value        = (Math.random() * 0.6 - 0.3).toFixed(2);
-      xform.querySelector('.xform-ty').value        = (Math.random() * 0.6 - 0.3).toFixed(2);
-      xform.querySelector('.xform-weight').value    = (Math.random() * 1.2 + 0.5).toFixed(1);
-      xform.querySelector('.xform-color').value     = palette.colors[idx % palette.colors.length];
+    controls.gamma.value      = (Math.random() * 1.8 + 1.4).toFixed(1);
+    controls.brightness.value = (Math.random() * 7 + 2).toFixed(1);
+    controls.symmetry.value   = [1, 1, 1, 2, 2, 3, 3, 4, 6][Math.floor(Math.random() * 9)];
 
-      const pool = idx === 0 ? EXPANDER_VARIATIONS : ALL_VARIATIONS;
-      xform.querySelector('.xform-variation').value = pool[Math.floor(Math.random() * pool.length)];
-
-      updateXformDisplays(xform);
-    });
-
+    const gammaDisplay = controls.gamma.closest('.control-group')?.querySelector('.value-display');
+    if (gammaDisplay) gammaDisplay.textContent = parseFloat(controls.gamma.value).toFixed(1);
     const brightnessDisplay = controls.brightness.closest('.control-group')?.querySelector('.value-display');
     if (brightnessDisplay) brightnessDisplay.textContent = parseFloat(controls.brightness.value).toFixed(1);
     const symDisplay = controls.symmetry.closest('.control-group')?.querySelector('.value-display');
     if (symDisplay) symDisplay.textContent = controls.symmetry.value;
+
+    // Randomize number of transforms (2–4) and rebuild from scratch
+    const numXforms = 2 + Math.floor(Math.random() * 3);
+    controls.xformsContainer.innerHTML = '';
+    xformCounter = 0;
+
+    for (let i = 0; i < numXforms; i++) {
+      const pool = i === 0 ? EXPANDER_VARIATIONS : ALL_VARIATIONS;
+      addXform(true, {
+        rotation:  Math.floor(Math.random() * 360),
+        scale:     +(Math.random() * 0.55 + 0.3).toFixed(2),
+        tx:        +(Math.random() * 1.0 - 0.5).toFixed(2),
+        ty:        +(Math.random() * 1.0 - 0.5).toFixed(2),
+        weight:    +(Math.random() * 1.5 + 0.3).toFixed(1),
+        color:     palette.colors[i % palette.colors.length],
+        variation: pool[Math.floor(Math.random() * pool.length)],
+      });
+    }
 
     triggerFullRender();
   }

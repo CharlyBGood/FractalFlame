@@ -120,19 +120,22 @@ header p {
 
 #palette-grid {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
 .palette-btn {
   display: flex;
-  gap: 2px;
-  padding: 4px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 5px 4px;
   background: var(--input-bg);
   border: 2px solid transparent;
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s, transform 0.1s;
+  min-width: 46px;
 }
 
 .palette-btn:hover {
@@ -145,11 +148,30 @@ header p {
   box-shadow: 0 0 8px rgba(0, 242, 255, 0.4);
 }
 
+.palette-swatches {
+  display: flex;
+  gap: 2px;
+}
+
+.palette-name {
+  font-size: 0.58em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-color);
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.palette-btn.active .palette-name {
+  opacity: 1;
+  color: var(--primary-neon);
+}
+
 .palette-swatch {
   display: block;
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
 }
 
 /* ── Controls ── */
@@ -448,11 +470,20 @@ select:hover, input[type="color"]:hover {
   .main-container { flex-direction: column; }
   .controls-panel {
     width: 100%;
-    height: 45vh;
-    min-height: 280px;
+    max-height: 55vh;
+    min-height: 220px;
     border-bottom: 2px solid var(--primary-neon);
+    overflow-y: auto;
   }
-  .canvas-container { height: 55vh; }
+  .xforms-section {
+    flex: none;
+    min-height: 180px;
+    overflow-y: visible;
+  }
+  .canvas-container {
+    flex: 1;
+    min-height: 220px;
+  }
 }
 
 @media (max-width: 768px) and (orientation: landscape) {
@@ -460,8 +491,13 @@ select:hover, input[type="color"]:hover {
   .controls-panel {
     width: 45vw;
     height: 100vh;
+    max-height: none;
     border-bottom: none;
     border-right: 2px solid var(--primary-neon);
+  }
+  .xforms-section {
+    flex: 1;
+    overflow-y: auto;
   }
   .canvas-container { width: 55vw; height: 100vh; }
 }
